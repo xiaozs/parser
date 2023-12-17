@@ -6,7 +6,7 @@ export interface Position {
     col: number;
 }
 
-export interface Token<T extends string> {
+export interface Token<T extends string = string> {
     content: string;
     start: Position;
     end: Position;
@@ -59,25 +59,27 @@ export interface Terminal {
     token: Token<string>;
 }
 
-export type TerminalClass = new () => Terminal;
+export type TerminalClass<T extends Terminal> = new () => T;
 
-export type TerminalResult<T extends TerminalClass[]> = {
+export type TerminalResult<T extends Terminal[]> = {
     [Channel in GetChannel<T[number]>]: TerminalType<T, Channel>[];
 };
 
-export type TerminalType<T extends TerminalClass[], Channel> =
-    T extends [infer first extends TerminalClass, ... infer rest extends TerminalClass[]]
-    ? (GetChannel<first> extends Channel ? InstanceType<first> : never) | TerminalType<rest, Channel> : never;
+export type TerminalType<T extends Terminal[], Channel> =
+    T extends [infer first extends Terminal, ... infer rest extends Terminal[]]
+    ? (GetChannel<first> extends Channel ? first : never) | TerminalType<rest, Channel> : never;
 
-export interface LexerResult<T extends TerminalClass[]> {
+export interface LexerResult<T extends Terminal[]> {
     success: TerminalResult<T>;
     fail: Token<string>[];
 }
 
-export class Lexer<T extends TerminalClass[]> {
+export type TerminalClassArray<T extends Terminal[]> = { [K in keyof T]: TerminalClass<T[K]> };
+
+export class Lexer<T extends Terminal[]> {
     private metas: TerminalMeta[];
 
-    constructor(terminals: [...T]) {
+    constructor(terminals: TerminalClassArray<[...T]>) {
         this.metas = terminals
             .map(ctor => {
                 const params = getTerminalParams(ctor);
@@ -168,10 +170,10 @@ export class Lexer<T extends TerminalClass[]> {
 
 interface TerminalMeta {
     params: TerminalParams;
-    ctor: TerminalClass;
+    ctor: TerminalClass<Terminal>;
 }
 
-type GetChannel<T extends TerminalClass> = InstanceType<T>["token"] extends Token<infer C> ? C : never;
+type GetChannel<T extends Terminal> = T["token"] extends Token<infer C> ? C : never;
 
 function keywordHandler(keyword: string): SpliterHandler {
     return function (str: string, start: number) {
@@ -227,7 +229,7 @@ interface TerminalParams {
 
 
 let isGenerateMode = false;
-function generateTermianl(ctor: TerminalClass) {
+function generateTermianl(ctor: TerminalClass<Terminal>) {
     try {
         isGenerateMode = true;
         return new ctor();
@@ -236,7 +238,7 @@ function generateTermianl(ctor: TerminalClass) {
     }
 }
 
-function getTerminalParams(ctor: TerminalClass): TerminalParams {
+function getTerminalParams(ctor: TerminalClass<Terminal>): TerminalParams {
     try {
         new ctor();
         throw new TermianlDefineError();
